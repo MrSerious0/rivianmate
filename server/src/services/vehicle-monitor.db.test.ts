@@ -153,8 +153,15 @@ describe.skipIf(!url)('navigation fixes through the monitor', () => {
 
   it('stores a navigation frame replayed long after the fact once, at its own time', async () => {
     const taken = Date.now() - 6 * 3600_000;
-    await handleDelta(delta(40.5, -88.99, 12.5, 271.5, taken));
-    await handleDelta(delta(40.5, -88.99, 12.5, 271.5, taken));
+    const frame = delta(40.5, -88.99, 12.5, 271.5, taken);
+    // One other reading changes between the two, so the second delta reaches
+    // the writer carrying the same navigation frame again.
+    const withSoc = (value: number) => ({
+      ...frame,
+      batteryLevel: { value, timeStamp: new Date(taken).toISOString() },
+    });
+    await handleDelta(withSoc(50));
+    await handleDelta(withSoc(51));
     expect((await points()).map((p) => p.ts.getTime())).toEqual([taken]);
   });
 });

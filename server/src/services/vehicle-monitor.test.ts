@@ -230,4 +230,17 @@ describe('legacy-preferred fields', () => {
     await delta('v1', { navLocation: fix('2026-10-13T12:00:31Z') }, 'parallax');
     expect(navOf(monitor)).toEqual(fix('2026-10-13T12:00:31Z'));
   });
+
+  it('keeps a navigation fix older than the legacy fixes already seen', async () => {
+    const { monitor, delta } = oneVehicle();
+    // An R2: a fix a minute, so the three span two minutes, and a navigation
+    // fix delivered after it was taken. Nothing here says legacy is a track.
+    await legacyFixes(delta, [
+      '2026-10-13T12:00:00Z',
+      '2026-10-13T12:01:00Z',
+      '2026-10-13T12:02:00Z',
+    ]);
+    await delta('v1', { navLocation: fix('2026-10-13T12:00:20Z') }, 'parallax');
+    expect(navOf(monitor)).toEqual(fix('2026-10-13T12:00:20Z'));
+  });
 });

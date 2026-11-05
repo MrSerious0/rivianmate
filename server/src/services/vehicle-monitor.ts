@@ -74,6 +74,11 @@ type StateSource = 'legacy' | 'parallax';
 const LEGACY_DENSE_WINDOW_MS = 30_000;
 const LEGACY_DENSE_FIXES = 3;
 /**
+ * Fix times kept per vehicle: enough to judge the feed as of a navigation
+ * fix's own time, which can be older than the newest fixes already seen.
+ */
+const LEGACY_FIX_TIMES_KEPT = 16;
+/**
  * Parallax sends the next charging window again as each one ends, so one
  * this old is from a schedule that's since been switched off.
  */
@@ -137,7 +142,7 @@ export class VehicleMonitor {
   private schedules = new Map<string, VehicleSchedules>();
   /** Each vehicle's legacy readings that outrank Parallax's, by field name. */
   private legacySeen = new Map<string, Set<string>>();
-  /** Each vehicle's newest legacy fix times, oldest first; LEGACY_DENSE_FIXES at most. */
+  /** Each vehicle's newest legacy fix times, oldest first; LEGACY_FIX_TIMES_KEPT at most. */
   private legacyFixTimes = new Map<string, number[]>();
   /** Whether each vehicle's track is currently coming from legacy's own fixes. */
   private legacyTracked = new Map<string, boolean>();
@@ -592,13 +597,20 @@ export class VehicleMonitor {
     if (!Number.isFinite(at)) return;
     const times = this.legacyFixTimes.get(vehicleId) ?? [];
     if (times.length > 0 && at <= times.at(-1)!) return;
-    this.legacyFixTimes.set(vehicleId, [...times, at].slice(-LEGACY_DENSE_FIXES));
+    this.legacyFixTimes.set(vehicleId, [...times, at].slice(-LEGACY_FIX_TIMES_KEPT));
   }
 
   /** Whether legacy is a track of its own as of `at`: enough fixes, recently enough. */
   private legacyTracks(vehicleId: string, at: number): boolean {
     const times = this.legacyFixTimes.get(vehicleId) ?? [];
-    return times.length >= LEGACY_DENSE_FIXES && at - times[0]! <= LEGACY_DENSE_WINDOW_MS;
+    // Only fixes at or before `at` describe the feed then. Using the newest
+    // three regardless lets a late navigation fix look like a dense feed: its
+    // own time is behind fixes that had not happened yet when it was taken.
+    const before = times.filter((t) => t <= at);
+    return (
+      before.length >= LEGACY_DENSE_FIXES &&
+      at - before[before.length - LEGACY_DENSE_FIXES]! <= LEGACY_DENSE_WINDOW_MS
+    );
   }
 
   private async handleDelta(
